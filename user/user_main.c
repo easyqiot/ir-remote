@@ -40,9 +40,27 @@
 
 LOCAL EasyQSession eq;
 
+#define CMD_PLAY	0x04CFC17E
+#define CMD_ON		0x04CFE25D
+#define CMD_STOP	0x04CFD16E
+
 
 void ir_cmd(uint32_t code) {
-	INFO("%u\r\n", code);
+	switch (code) {
+		case CMD_ON:
+			INFO("ON/OFF\r\n");
+			irr_disable_for(1000);
+			break;
+		case CMD_PLAY:
+			INFO("Play\r\n");
+			irr_disable_for(500);
+			break;
+		case CMD_STOP:
+			INFO("Stop\r\n");
+			break;
+		default:
+			INFO("Unknown Command: 0x%08X\r\n", code);
+	}
 }
 
 
@@ -111,30 +129,9 @@ void wifi_connect_cb(uint8_t status) {
 }
 
 
-
-void interrupt_dispatch()
-{
-    s32 gpio_status;
-    gpio_status = GPIO_REG_READ(GPIO_STATUS_ADDRESS);
-    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, gpio_status);
-    if( (gpio_status>>IR_NUM)& BIT0 ){
-        irr_intr_handler();
-    }  
-    else{
-        INFO("gpio num mismached   \n");
-    }
-}
-
-
-
 void user_init(void) {
     uart_init(BIT_RATE_115200, BIT_RATE_115200);
     os_delay_us(60000);
-
-	// IR 
-	PIN_FUNC_SELECT(IR_MUX, IR_FUNC);
-	GPIO_DIS_OUTPUT(GPIO_ID_PIN(IR_NUM));
-	PIN_PULLUP_DIS(IR_MUX);
 
 	// LED
 	PIN_FUNC_SELECT(LED_MUX, LED_FUNC);
@@ -149,14 +146,9 @@ void user_init(void) {
 	eq.ondisconnect = easyq_disconnect_cb;
 	eq.onconnectionerror = easyq_connection_error_cb;
 	eq.onmessage = easyq_message_cb;
-
-	ETS_GPIO_INTR_DISABLE();
-	ETS_GPIO_INTR_ATTACH(interrupt_dispatch, NULL);
-	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), GPIO_PIN_INTR_NEGEDGE);
-    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT(IR_NUM));
-	ETS_GPIO_INTR_ENABLE();
-	irr_register_callback(ir_cmd);
 	
+	irr_register_callback(ir_cmd);
+	irr_init();
     WIFI_Connect(WIFI_SSID, WIFI_PSK, wifi_connect_cb);
     INFO("System started ...\r\n");
 }

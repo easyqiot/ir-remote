@@ -45,5 +45,5 @@ struct ir_session {
 void irr_init();
 void irr_intr_handler();
 void irr_register_callback(IRCallback);
-
+void irr_disable_for(uint16_t);
 #endif

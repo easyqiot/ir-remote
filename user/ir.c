@@ -73,7 +73,49 @@ void irr_intr_handler()
  }
 
 
+void interrupt_dispatch()
+{
+    s32 gpio_status;
+    gpio_status = GPIO_REG_READ(GPIO_STATUS_ADDRESS);
+    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, gpio_status);
+    if( (gpio_status>>IR_NUM)& BIT0 ){
+        irr_intr_handler();
+    }  
+    else{
+        INFO("gpio num mismached   \n");
+    }
+}
+
+
+void irr_init() {
+	PIN_FUNC_SELECT(IR_MUX, IR_FUNC);
+	GPIO_DIS_OUTPUT(GPIO_ID_PIN(IR_NUM));
+	PIN_PULLUP_DIS(IR_MUX);
+	ETS_GPIO_INTR_DISABLE();
+	ETS_GPIO_INTR_ATTACH(interrupt_dispatch, NULL);
+	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), GPIO_PIN_INTR_NEGEDGE);
+    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT(IR_NUM));
+	ETS_GPIO_INTR_ENABLE();
+
+}
+
 void irr_register_callback(IRCallback c) {
 	ir.callback = c;
 }
 
+
+void irr_enable() {
+	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), 
+			GPIO_PIN_INTR_NEGEDGE);
+}
+
+
+LOCAL ETSTimer suspend_timer;
+
+void irr_disable_for(uint16_t ms) {
+	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), 
+			GPIO_PIN_INTR_DISABLE);
+    os_timer_disarm(&suspend_timer);
+    os_timer_setfn(&suspend_timer, (os_timer_func_t *)irr_enable, NULL);
+    os_timer_arm(&suspend_timer, ms, 0);
+}

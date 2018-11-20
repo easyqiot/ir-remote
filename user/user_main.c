@@ -41,6 +41,11 @@
 LOCAL EasyQSession eq;
 
 
+void ir_cmd(uint32_t code) {
+	INFO("%u\r\n", code);
+}
+
+
 void
 fota_report_status(const char *q) {
 	char str[50];
@@ -78,7 +83,6 @@ easyq_connect_cb(void *arg) {
 	INFO("\r\n***** InfraRed Receiver "VERSION"****\r\n");
 	const char * queues[] = {FOTA_QUEUE};
 	easyq_pull_all(&eq, queues, 1);
-	irr_enable();
 }
 
 
@@ -108,14 +112,19 @@ void wifi_connect_cb(uint8_t status) {
 
 
 
-//void ICACHE_FLASH_ATTR
-//ir_interrupt() { //	uint16_t status; //	
-//	// Clear the interrupt
-//	status = GPIO_REG_READ(GPIO_STATUS_ADDRESS);
-//	bool hi = GPIO_INPUT_GET(GPIO_ID_PIN(IR_NUM));
-//	LED_SET(hi);
-//	GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, status);
-//}
+void interrupt_dispatch()
+{
+    s32 gpio_status;
+    gpio_status = GPIO_REG_READ(GPIO_STATUS_ADDRESS);
+    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, gpio_status);
+    if( (gpio_status>>IR_NUM)& BIT0 ){
+        irr_intr_handler();
+    }  
+    else{
+        INFO("gpio num mismached   \n");
+    }
+}
+
 
 
 void user_init(void) {
@@ -123,9 +132,9 @@ void user_init(void) {
     os_delay_us(60000);
 
 	// IR 
-	//PIN_FUNC_SELECT(IR_MUX, IR_FUNC);
-	//PIN_PULLUP_EN(IR_MUX);
-	//GPIO_DIS_OUTPUT(GPIO_ID_PIN(IR_NUM));
+	PIN_FUNC_SELECT(IR_MUX, IR_FUNC);
+	GPIO_DIS_OUTPUT(GPIO_ID_PIN(IR_NUM));
+	PIN_PULLUP_DIS(IR_MUX);
 
 	// LED
 	PIN_FUNC_SELECT(LED_MUX, LED_FUNC);
@@ -141,12 +150,12 @@ void user_init(void) {
 	eq.onconnectionerror = easyq_connection_error_cb;
 	eq.onmessage = easyq_message_cb;
 
-	//ETS_GPIO_INTR_DISABLE();
-	//ETS_GPIO_INTR_ATTACH(ir_interrupt, NULL);
-	//gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), GPIO_PIN_INTR_ANYEDGE);
-	//ETS_GPIO_INTR_ENABLE();
-	//ir_interrupt();
-	irr_init();
+	ETS_GPIO_INTR_DISABLE();
+	ETS_GPIO_INTR_ATTACH(interrupt_dispatch, NULL);
+	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), GPIO_PIN_INTR_NEGEDGE);
+    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT(IR_NUM));
+	ETS_GPIO_INTR_ENABLE();
+	irr_register_callback(ir_cmd);
 	
     WIFI_Connect(WIFI_SSID, WIFI_PSK, wifi_connect_cb);
     INFO("System started ...\r\n");

@@ -1,6 +1,4 @@
-# smart-outlet
-A simple EasyQ controlled power line outlet.
-
+# IR Remote  
 
 
 ### Build
@@ -13,8 +11,8 @@ to setup your environment.
 source esp-env/nonos/activate.sh
 
 cd esp-env/nonos/sdk/
-git clone git@github.com:easyqiot/smart-outlet.git
-cd smart-outlet
+git clone git@github.com:easyqiot/ir-remote.git
+cd ir-remote 
 bash ./gen_misc.sh
 ```
 

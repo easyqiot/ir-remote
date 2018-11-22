@@ -7,9 +7,9 @@
 
 
 LOCAL uint32_t lasttime;
-
-
+LOCAL ETSTimer suspend_timer;
 LOCAL struct ir_session ir;
+
 
 LOCAL void irr_reset_data() {
 	ir.cursor = 0;
@@ -86,19 +86,6 @@ void interrupt_dispatch()
     }
 }
 
-
-void irr_init() {
-	PIN_FUNC_SELECT(IR_MUX, IR_FUNC);
-	GPIO_DIS_OUTPUT(GPIO_ID_PIN(IR_NUM));
-	PIN_PULLUP_DIS(IR_MUX);
-	ETS_GPIO_INTR_DISABLE();
-	ETS_GPIO_INTR_ATTACH(interrupt_dispatch, NULL);
-	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), GPIO_PIN_INTR_NEGEDGE);
-    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT(IR_NUM));
-	ETS_GPIO_INTR_ENABLE();
-
-}
-
 void irr_register_callback(IRCallback c) {
 	ir.callback = c;
 }
@@ -107,15 +94,37 @@ void irr_register_callback(IRCallback c) {
 void irr_enable() {
 	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), 
 			GPIO_PIN_INTR_NEGEDGE);
+	LED_SET(OFF);
+    os_timer_disarm(&suspend_timer);
 }
 
 
-LOCAL ETSTimer suspend_timer;
 
 void irr_disable_for(uint16_t ms) {
+	LED_SET(ON);
 	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), 
 			GPIO_PIN_INTR_DISABLE);
     os_timer_disarm(&suspend_timer);
     os_timer_setfn(&suspend_timer, (os_timer_func_t *)irr_enable, NULL);
     os_timer_arm(&suspend_timer, ms, 0);
 }
+
+
+void irr_init() {
+	// LED
+	PIN_FUNC_SELECT(LED_MUX, LED_FUNC);
+	GPIO_OUTPUT_SET(GPIO_ID_PIN(LED_NUM), 1);
+	
+	// IR Diode
+	PIN_FUNC_SELECT(IR_MUX, IR_FUNC);
+	GPIO_DIS_OUTPUT(GPIO_ID_PIN(IR_NUM));
+
+	PIN_PULLUP_DIS(IR_MUX);
+	ETS_GPIO_INTR_DISABLE();
+	ETS_GPIO_INTR_ATTACH(interrupt_dispatch, NULL);
+	gpio_pin_intr_state_set(GPIO_ID_PIN(IR_NUM), GPIO_PIN_INTR_NEGEDGE);
+    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT(IR_NUM));
+	ETS_GPIO_INTR_ENABLE();
+}
+
+

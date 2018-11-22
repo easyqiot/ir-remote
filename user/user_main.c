@@ -13,6 +13,8 @@
 #include <user_interface.h>
 #include <driver/uart.h>
 #include <upgrade.h>
+#include <string.h>
+#include <osapi.h>
 
 // LIB: EasyQ
 #include "easyq.h" 
@@ -24,42 +26,65 @@
 
 /* GPIO */
 
-// LED
-#define LED_MUX			PERIPHS_IO_MUX_GPIO2_U
-#define LED_NUM			2
-#define LED_FUNC		FUNC_GPIO2
-
-//#define LED_MUX			PERIPHS_IO_MUX_MTMS_U
-//#define LED_NUM			14
-//#define LED_FUNC		FUNC_GPIO14
-
-#define ON	true
-#define OFF false
-#define LED_SET(on)	GPIO_OUTPUT_SET(GPIO_ID_PIN(LED_NUM), on)
-
-
 LOCAL EasyQSession eq;
 
 #define CMD_PLAY	0x04CFC17E
 #define CMD_ON		0x04CFE25D
 #define CMD_STOP	0x04CFD16E
+#define CMD_VOLUP	0x04CFE659
+#define CMD_VOLDOWN	0x04CFD669
+
+#define AMP_SUPPLY_QUEUE	"amp:supply"
+#define AMP_VOLUME_QUEUE	"amp:volume"
+#define VOLUME_STEP			"280"
+#define VOLUME_REPEAT_STEP	"160"
+
+
+static uint32_t last_code;
+static uint32_t last_time;
 
 
 void ir_cmd(uint32_t code) {
+	char a[28];
+	uint32_t time = system_get_time();
+	bool repeat = (code == last_code) && ((time - last_time) < 300000);
+	last_code = code;
+	last_time = time;
 	switch (code) {
 		case CMD_ON:
 			INFO("ON/OFF\r\n");
-			irr_disable_for(1000);
+			irr_disable_for(500);
+			easyq_push(&eq, AMP_SUPPLY_QUEUE, "toggle");
 			break;
+
 		case CMD_PLAY:
 			INFO("Play\r\n");
-			irr_disable_for(500);
+			irr_disable_for(100);
 			break;
+
 		case CMD_STOP:
 			INFO("Stop\r\n");
+			irr_disable_for(500);
 			break;
+
+		case CMD_VOLUP:
+			irr_disable_for(10);
+			easyq_push(&eq, AMP_VOLUME_QUEUE, 
+					repeat? VOLUME_REPEAT_STEP: VOLUME_STEP
+				);
+			break;
+
+		case CMD_VOLDOWN:
+			irr_disable_for(10);
+			easyq_push(&eq, AMP_VOLUME_QUEUE, 
+					repeat? "-"VOLUME_REPEAT_STEP: "-"VOLUME_STEP
+				);
+			break;
+
 		default:
-			INFO("Unknown Command: 0x%08X\r\n", code);
+			os_sprintf(&a[0], "Unknown Command: 0x%08X", code);
+			easyq_push(&eq, IR_QUEUE, a);
+			//INFO("Unknown Command: 0x%08X\r\n", code);
 	}
 }
 
@@ -133,9 +158,6 @@ void user_init(void) {
     uart_init(BIT_RATE_115200, BIT_RATE_115200);
     os_delay_us(60000);
 
-	// LED
-	PIN_FUNC_SELECT(LED_MUX, LED_FUNC);
-	GPIO_OUTPUT_SET(GPIO_ID_PIN(LED_NUM), 1);
 
 	EasyQError err = easyq_init(&eq, EASYQ_HOSTNAME, EASYQ_PORT, EASYQ_LOGIN);
 	if (err != EASYQ_OK) {
@@ -149,6 +171,7 @@ void user_init(void) {
 	
 	irr_register_callback(ir_cmd);
 	irr_init();
+	//motor_init();
     WIFI_Connect(WIFI_SSID, WIFI_PSK, wifi_connect_cb);
     INFO("System started ...\r\n");
 }

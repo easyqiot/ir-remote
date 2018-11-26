@@ -55,11 +55,22 @@ void ICACHE_FLASH_ATTR WIFI_Connect(uint8_t* ssid, uint8_t* pass, WifiCallback c
 
 	INFO("WIFI_INIT\r\n");
 	wifi_set_opmode_current(STATION_MODE);
-	wifi_set_sleep_type(NONE_SLEEP_T);
+
+	if (!wifi_set_sleep_level(MAX_SLEEP_T)) {
+		ERROR("Cannot change WIFI level.\r\n");
+	}
+	// TODO: MACRO for 5 Sleep level
+	if (!wifi_set_listen_interval(10)) {
+		ERROR("Cannot change WIFI beacon interval.\r\n");
+	}
+	if (!wifi_set_sleep_type(LIGHT_SLEEP_T)) {
+		ERROR("Cannot change WIFI sleep type.\r\n");
+	}
+
 	//wifi_set_sleep_type(MODEM_SLEEP_T);
 	//wifi_set_sleep_type(LIGHT_SLEEP_T);
-
 	//wifi_station_set_auto_connect(FALSE);
+	//
 	wifiCb = cb;
 
 	os_memset(&stationConf, 0, sizeof(struct station_config));

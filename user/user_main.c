@@ -26,8 +26,6 @@
 
 /* GPIO */
 
-LOCAL EasyQSession eq;
-
 #define CMD_PLAY	0x04CFC17E
 #define CMD_ON		0x04CFE25D
 #define CMD_STOP	0x04CFD16E
@@ -36,21 +34,26 @@ LOCAL EasyQSession eq;
 
 #define AMP_SUPPLY_QUEUE	"amp:supply"
 #define AMP_VOLUME_QUEUE	"amp:volume"
-#define VOLUME_STEP			"280"
-#define VOLUME_REPEAT_STEP	"160"
+#define VOLUME_STEP			"32"
+#define VOLUME_REPEAT_STEP	"16"
 
 
-static uint32_t last_code;
-static uint32_t last_time;
+LOCAL EasyQSession eq;
+LOCAL ETSTimer wakeup_timer;
+LOCAL uint32_t last_code;
+LOCAL uint32_t last_time;
 
 
-void ir_cmd(uint32_t code) {
-	char a[28];
-	uint32_t time = system_get_time();
-	bool repeat = (code == last_code) && ((time - last_time) < 300000);
-	last_code = code;
-	last_time = time;
-	switch (code) {
+typedef struct {
+	uint32_t code;
+	bool repeat;
+} IREvent;
+
+
+void wokenup(void *arg) {
+	char a[32];
+	IREvent *e = (IREvent*) arg;
+	switch (e->code) {
 		case CMD_ON:
 			INFO("ON/OFF\r\n");
 			irr_disable_for(500);
@@ -68,23 +71,54 @@ void ir_cmd(uint32_t code) {
 			break;
 
 		case CMD_VOLUP:
-			irr_disable_for(10);
+			if (e->repeat) {
+				irr_disable_for(10);
+			}
+			else {
+				irr_disable_for(5);
+			}
 			easyq_push(&eq, AMP_VOLUME_QUEUE, 
-					repeat? VOLUME_REPEAT_STEP: VOLUME_STEP
+					e->repeat? "+"VOLUME_REPEAT_STEP: "+"VOLUME_STEP
 				);
 			break;
 
 		case CMD_VOLDOWN:
-			irr_disable_for(10);
+			if (e->repeat) {
+				irr_disable_for(10);
+			}
+			else {
+				irr_disable_for(5);
+			}
 			easyq_push(&eq, AMP_VOLUME_QUEUE, 
-					repeat? "-"VOLUME_REPEAT_STEP: "-"VOLUME_STEP
+					e->repeat? "-"VOLUME_REPEAT_STEP: "-"VOLUME_STEP
 				);
 			break;
 
 		default:
-			os_sprintf(&a[0], "Unknown Command: 0x%08X", code);
+			os_sprintf(&a[0], "Unknown Command: 0x%08X", e->code);
 			easyq_push(&eq, IR_QUEUE, a);
 			//INFO("Unknown Command: 0x%08X\r\n", code);
+	}
+	os_free(e);
+}
+
+
+void ir_cmd(uint32_t code) {
+	uint32_t time = system_get_time();
+	IREvent *e = (IREvent*) os_zalloc(sizeof(IREvent));
+	e->repeat = (code == last_code) && ((time - last_time) < 300000);
+	e->code = code;
+	last_code = code;
+	last_time = time;
+	
+	if (e->repeat) {
+		wokenup(e);
+	}
+	else {
+		os_timer_disarm(&wakeup_timer);
+		// Wait for system to wake up.
+		os_timer_setfn(&wakeup_timer, (os_timer_func_t *)wokenup, e);
+		os_timer_arm(&wakeup_timer, 5, 0);
 	}
 }
 

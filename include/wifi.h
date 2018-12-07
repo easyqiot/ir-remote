@@ -9,6 +9,7 @@
 #define USER_WIFI_H_
 #include "os_type.h"
 
+#define WIFI_SLEEP_LEVEL	5
 
 typedef void (*WifiCallback)(uint8_t);
 void ICACHE_FLASH_ATTR WIFI_Connect(uint8_t* ssid, uint8_t* pass, WifiCallback cb);

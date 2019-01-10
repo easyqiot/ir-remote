@@ -2,8 +2,9 @@
 // Internal 
 #include "partition.h"
 #include "wifi.h"
-#include "config.h"
+#include "io_config.h"
 #include "ir.h"
+#include "params.h"
 
 // SDK
 #include <ets_sys.h>
@@ -21,27 +22,17 @@
 #include "debug.h"
 
 
-#define VERSION				"0.1.0"
+#define VERSION		"0.1.0"
 
 
 /* GPIO */
 
-#define CMD_PLAY	0x04CFC17E
-#define CMD_ON		0x04CFE25D
-#define CMD_STOP	0x04CFD16E
-#define CMD_VOLUP	0x04CFE659
-#define CMD_VOLDOWN	0x04CFD669
 
-#define AMP_SUPPLY_QUEUE	"amp:supply"
-#define AMP_VOLUME_QUEUE	"amp:volume"
-#define VOLUME_STEP			"32"
-#define VOLUME_REPEAT_STEP	"16"
-
-
-LOCAL EasyQSession eq;
-LOCAL ETSTimer wakeup_timer;
-LOCAL uint32_t last_code;
-LOCAL uint32_t last_time;
+static EasyQSession eq;
+static ETSTimer wakeup_timer;
+static uint32_t last_code;
+static uint32_t last_time;
+static Params params;
 
 
 typedef struct {
@@ -92,6 +83,16 @@ void wokenup(void *arg) {
 			easyq_push(&eq, AMP_VOLUME_QUEUE, 
 					e->repeat? "-"VOLUME_REPEAT_STEP: "-"VOLUME_STEP
 				);
+			break;
+
+		case CMD_HUMIDIFIER:
+			irr_disable_for(500);
+			easyq_push(&eq, HUMIDIFIER_QUEUE, "toggle");
+			break;
+
+		case CMD_HUMIDIFIER_LIGHT:
+			irr_disable_for(500);
+			easyq_push(&eq, HUMIDIFIER_LIGHT_QUEUE, "toggle");
 			break;
 
 		default:
@@ -179,6 +180,20 @@ void easyq_disconnect_cb(void *arg)
 }
 
 
+void setup_easyq() {
+	EasyQError err = \
+			easyq_init(&eq, params.easyq_host, EASYQ_PORT, EASYQ_LOGIN);
+	if (err != EASYQ_OK) {
+		ERROR("EASYQ INIT ERROR: %d\r\n", err);
+		return;
+	}
+	eq.onconnect = easyq_connect_cb;
+	eq.ondisconnect = easyq_disconnect_cb;
+	eq.onconnectionerror = easyq_connection_error_cb;
+	eq.onmessage = easyq_message_cb;
+}
+
+
 void wifi_connect_cb(uint8_t status) {
     if(status == STATION_GOT_IP) {
         easyq_connect(&eq);
@@ -191,22 +206,22 @@ void wifi_connect_cb(uint8_t status) {
 void user_init(void) {
     uart_init(BIT_RATE_115200, BIT_RATE_115200);
     os_delay_us(60000);
-
-
-	EasyQError err = easyq_init(&eq, EASYQ_HOSTNAME, EASYQ_PORT, EASYQ_LOGIN);
-	if (err != EASYQ_OK) {
-		ERROR("EASYQ INIT ERROR: %d\r\n", err);
+	bool ok = params_load(&params);
+	if (!ok) {
+		ERROR("Cannot load Params\r\n");
+		system_upgrade_flag_set(UPGRADE_FLAG_FINISH);
+		system_upgrade_reboot();
 		return;
 	}
-	eq.onconnect = easyq_connect_cb;
-	eq.ondisconnect = easyq_disconnect_cb;
-	eq.onconnectionerror = easyq_connection_error_cb;
-	eq.onmessage = easyq_message_cb;
-	
+	INFO("Params loaded sucessfully: ssid: %s psk: %s easyq: %s\r\n",
+			params.wifi_ssid, 
+			params.wifi_psk,
+			params.easyq_host
+		);
+	setup_easyq();
 	irr_register_callback(ir_cmd);
 	irr_init();
-	//motor_init();
-    WIFI_Connect(WIFI_SSID, WIFI_PSK, wifi_connect_cb);
+    wifi_connect(params.wifi_ssid, params.wifi_psk, wifi_connect_cb);
     INFO("System started ...\r\n");
 }
 

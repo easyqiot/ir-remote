@@ -4,22 +4,12 @@
 
 #include <gpio.h>
 #include <eagle_soc.h>
+#include "io_config.h"
 
-
-// LED
-#define LED_MUX			PERIPHS_IO_MUX_GPIO0_U
-#define LED_NUM			0
-#define LED_FUNC		FUNC_GPIO0
 
 #define ON	true
 #define OFF false
 #define LED_SET(on)	GPIO_OUTPUT_SET(GPIO_ID_PIN(LED_NUM), !on)
-
-
-// IR
-#define IR_MUX			PERIPHS_IO_MUX_GPIO2_U
-#define IR_NUM			2
-#define IR_FUNC			FUNC_GPIO2
 
 
 #define MS				1000
